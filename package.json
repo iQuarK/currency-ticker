@@ -1,0 +1,20 @@
+{
+  "name": "currency-ticker",
+  "version": "1.0.0",
+  "description": "Sample of a currency ticker made with react",
+  "main": "index.html",
+  "scripts": {
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iQuarK/currency-ticker.git"
+  },
+  "author": "Luis Sanchez Castellanos",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/iQuarK/currency-ticker/issues"
+  },
+  "homepage": "https://github.com/iQuarK/currency-ticker#readme",
+  "dependencies": {
+  }
+}

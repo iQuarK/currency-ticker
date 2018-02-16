@@ -1,0 +1,46 @@
+@font-face {
+    font-family: currency;
+    src: url(./fonts/SHPinscher-Regular.otf);
+}
+.ticker {
+    font-family: currency, 'Courier New', Courier, monospace;
+    font-size: 40px;
+    background-color: black;
+    color: white;
+    margin: 0 auto;
+    width: 400px;
+}
+
+.currency {
+    padding: 2px 5px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+}
+.currency-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.currency-value {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    line-height: 35px;
+}
+.currency-value.up {
+    color: #00EE00;
+}
+.currency-value.down {
+    color: #EE0000;
+}
+.currency-refreshed {
+    font-size: 12px;
+}
+.currency-bottom {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+}
