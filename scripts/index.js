@@ -1,19 +1,27 @@
 "use strict";
 
-// const CURRENCIES = ["EUR/USD", "USD/CHF", "USD/JPY"];
-const CURRENCIES = ["CHF/USD", "CHF/EUR", "CHF/GBP"];
-const API_KEY = "NNFLQ241C666YNWL"; //"<here your API key from alphavantage.co>";
+const CURRENCIES = ["EUR/USD", "USD/CHF", "USD/JPY"];
+const API_KEY = "<here your API key from alphavantage.co>";
 const SERVICE = "https://www.alphavantage.co";
-const FUNCTION = "CURRENCY_EXCHANGE_RATE";
+const FUNCTION = {
+    EXCHANGE: "CURRENCY_EXCHANGE_RATE",
+    PRICES: "MIDPRICE"
+};
 const KEY = {
     SOURCE: "Realtime Currency Exchange Rate",
     FROM: "1. From_Currency Code",
     TO: "3. To_Currency Code",
     RATE: "5. Exchange Rate",
-    REFRESHED_AT: "6. Last Refreshed"
+    REFRESHED_AT: "6. Last Refreshed",
+    PRICE_SOURCE: "Meta Data",
+    PRICE_SYMBOL: "1: Symbol",
+    PRICE_DATA: "Technical Analysis: MIDPRICE",
+    PRICE_VALUE: "MIDPRICE"
 };
-const REFRESH_TIME = 7000;
+const REFRESH_TIME = 4000;
 let state = {};
+
+const id = currency => currency.replace("/", "");
 
 const callAPI = url => {
     return new Promise((resolve, reject) => {
@@ -36,51 +44,63 @@ const callAPI = url => {
 
 const getExchangeRate = (from, to) => {
     return callAPI(
-        `${SERVICE}/query?function=${FUNCTION}&from_currency=${from}&to_currency=${to}&apikey=${API_KEY}`
+        `${SERVICE}/query?function=${
+            FUNCTION.EXCHANGE
+        }&from_currency=${from}&to_currency=${to}&apikey=${API_KEY}`
     );
 };
 
-const refreshCurrencies = () => {
-    console.log("refreshing currencies");
-    const length = CURRENCIES.length;
+const getPrices = (from, to) => {
+    return callAPI(
+        `${SERVICE}/query?function=${
+            FUNCTION.PRICES
+        }&symbol=${from}${to}&interval=60min&time_period=10&apikey=${API_KEY}`
+    );
+};
 
-    for (let i = 0; i < length; i++) {
-        const [from, to] = CURRENCIES[i].split("/");
-        getExchangeRate(from, to)
-            .then(updateState)
-            .catch(() =>
-                console.error("Incorrect data (maybe reached API limit?).")
-            );
-    }
+const refreshCurrency = index => {
+    const [from, to] = CURRENCIES[index].split("/");
 
-    tick();
+    getExchangeRate(from, to)
+        .then(updateState)
+        .catch(() =>
+            console.error("Incorrect data (maybe reached API limit?).")
+        );
+
+    const next = (index + 1) % CURRENCIES.length;
+    tick(next);
 };
 
 const updateState = source => {
-    console.log("updatestate");
     if (!!source && source[KEY.SOURCE]) {
         const data = source[KEY.SOURCE];
-        console.log("updating status of ", data, "rate", data[KEY.RATE]);
         const exchange = `${data[KEY.FROM]}/${data[KEY.TO]}`;
         const current = state[exchange];
-        state[exchange] = {
-            value: data[KEY.RATE],
-            refreshed: data[KEY.REFRESHED_AT],
-            change:
-                !!current && !!current.value
-                    ? getChange(current, data[KEY.RATE])
-                    : "equal"
-        };
-        const child = document.getElementById("root").childNodes[0];
-        console.log("replacing child", child);
-        document.getElementById("root").replaceChild(drawTicker(), child);
+        setState({
+            [exchange]: {
+                value: data[KEY.RATE],
+                refreshed: data[KEY.REFRESHED_AT],
+                showPrice: !!current ? current.showPrice : false,
+                prices: !!current ? current.prices : [],
+                change:
+                    !!current && !!current.value
+                        ? getChange(current, data[KEY.RATE])
+                        : "equal"
+            }
+        });
     } else {
-        console.error("incorrect data format");
+        console.error("incorrect data format", source);
     }
 };
 
+const setState = newState => {
+    state = { ...state, ...newState };
+
+    const child = document.getElementById("root").childNodes[0];
+    document.getElementById("root").replaceChild(drawTicker(), child);
+};
+
 const getChange = (current, nextValue) => {
-    console.log("getting change of", current, nextValue);
     let change = "equal";
 
     if (!!current.value && current.value !== nextValue) {
@@ -90,34 +110,73 @@ const getChange = (current, nextValue) => {
     return change;
 };
 
-const showPrice = currency => {};
+const showPrice = currency => {
+    setState({
+        [currency]: {
+            ...state[currency],
+            showPrice: !state[currency].showPrice
+        }
+    });
+
+    if (state[currency].showPrice) {
+        const [from, to] = currency.split("/");
+        getPrices(from, to)
+            .then(data => {
+                const meta = data[KEY.PRICE_SOURCE];
+                const symbol = meta[KEY.PRICE_SYMBOL];
+                const timeline = data[KEY.PRICE_DATA];
+                setState({
+                    [currency]: {
+                        ...state[currency],
+                        prices: _.map(timeline, (value, key) => ({
+                            date: new Date(key),
+                            value: +value[KEY.PRICE_VALUE]
+                        }))
+                    }
+                });
+            })
+            .catch(data => console.error(data));
+    }
+};
 
 // returns the template according to the current state
 const drawTicker = () => {
-    console.log("drawing");
     const length = CURRENCIES.length;
     let root = document.createElement("div");
     root.id = "ticker";
     root.className = "ticker";
 
-    for (let i = 0; i < length; i++) {
-        const currency = CURRENCIES[i];
-        if (state[currency]) {
-            root.appendChild(drawCell(currency));
-        } else {
-            root.appendChild(drawLoading(currency));
+    if (API_KEY === "<here your API key from alphavantage.co>") {
+        root.appendChild(drawMissingAPIKEY());
+    } else {
+        for (let i = 0; i < length; i++) {
+            const currency = CURRENCIES[i];
+            if (state[currency]) {
+                root.appendChild(drawCell(currency));
+            } else {
+                root.appendChild(drawLoading(currency));
+            }
         }
     }
-    console.log("returning root", root);
     return root;
+};
+const drawMissingAPIKEY = () => {
+    let cell = document.createElement("div");
+    cell.className = "error";
+    cell.innerText =
+        "Missing API KEY, please add yours in the constant API_KEY";
+    return cell;
 };
 
 const drawCell = currency => {
     let cell = document.createElement("div");
-    cell.id = currency;
+    cell.id = id(currency);
     cell.className = "currency-cell";
     cell.appendChild(drawRow(currency));
     cell.appendChild(drawBottom(currency));
+    if (state[currency].showPrice) {
+        cell.appendChild(drawPrices(currency));
+    }
     return cell;
 };
 
@@ -137,6 +196,27 @@ const drawBottom = currency => {
     return bottom;
 };
 
+const drawPrices = currency => {
+    const length = state[currency].prices.length;
+    let prices = document.createElement("ul");
+    prices.className = "currency-prices";
+    if (!length) {
+        prices.innerText = "Loading...";
+    } else {
+        for (let i = 0; i < length; i++) {
+            prices.appendChild(drawPrice(state[currency].prices[i]));
+        }
+    }
+    return prices;
+};
+
+const drawPrice = price => {
+    let row = document.createElement("li");
+    row.className = "currency-price";
+    row.innerText = `${price.date}: ${price.value}`;
+    return row;
+};
+
 const drawButton = currency => {
     let button = document.createElement("button");
     button.className = "currency-button";
@@ -151,6 +231,7 @@ const drawLoading = currency => {
     name.className = "currency-loading";
     return name;
 };
+
 const drawName = currency => {
     let name = document.createElement("span");
     name.innerText = currency;
@@ -161,23 +242,21 @@ const drawName = currency => {
 const drawValue = currency => {
     let value = document.createElement("span");
     value.className = "currency-value";
-    console.log(`state ${currency}? ${JSON.stringify(state[currency])}`);
-    console.log("rounding", Math.round(state[currency].value * 100) / 100);
     value.className += ` ${state[currency].change}`;
     value.innerHTML =
         Math.round(state[currency].value * 100) / 100 +
-        formatChange(state[currency].change);
+        parseChange(state[currency].change);
     return value;
 };
 
 const drawRefreshed = currency => {
     let refreshed = document.createElement("div");
     refreshed.className = "currency-refreshed";
-    refreshed.innerHTML = state[currency].refreshed;
+    refreshed.innerText = `Last refreshed: ${state[currency].refreshed}`;
     return refreshed;
 };
 
-const formatChange = change => {
+const parseChange = change => {
     let code = "=";
 
     switch (change) {
@@ -192,14 +271,15 @@ const formatChange = change => {
     return code;
 };
 
-const tick = () => {
-    console.log("tick");
-    setTimeout(refreshCurrencies, REFRESH_TIME);
+// Only one currency is requested each time, because of limits in the API
+const tick = index => {
+    setTimeout(() => refreshCurrency(index), REFRESH_TIME);
 };
+
 // draws the first screen, and initialises all the timeouts to request data
 const init = () => {
     document.getElementById("root").appendChild(drawTicker());
-    refreshCurrencies();
+    refreshCurrency(0);
 };
 
 init();
